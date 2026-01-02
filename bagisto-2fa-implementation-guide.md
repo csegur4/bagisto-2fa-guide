@@ -146,6 +146,7 @@ namespace Webkul\Admin\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Contracts\Encryption\DecryptException;
 
 class TwoFactorController extends Controller
 {
@@ -265,7 +266,17 @@ class TwoFactorController extends Controller
                 ->withErrors(['error' => 'Account deactivated.']);
         }
 
-        $secret = decrypt($user->google2fa_secret);
+        try {
+            $secret = decrypt($user->google2fa_secret);
+        } catch (DecryptException $e) {
+            $user->google2fa_secret = null;
+            $user->save();
+
+            session()->forget('2fa:user:id');
+            return redirect()->route('admin.session.create')
+                ->withErrors(['error' => 'Possible system migration detected. Reconfigure 2FA.']);
+        }
+        
         $google2fa = app('pragmarx.google2fa');
 
         $verified = $google2fa->verifyGoogle2FA($secret, $request->code);
